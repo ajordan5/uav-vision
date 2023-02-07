@@ -1,7 +1,9 @@
+import numpy as np
+
 north0 = 0.  # initial north position
 east0 = 0.  # initial east position
 down0 = -100.0  # initial down position
-u0 = 25.  # initial velocity along body x-axis
+u0 = 0.  # initial velocity along body x-axis
 v0 = 0.  # initial velocity along body y-axis
 w0 = 0.  # initial velocity along body z-axis
 p0 = 0  # initial roll rate
@@ -12,3 +14,7 @@ qw = 1
 qx = 0
 qy = 0
 qz = 0
+
+m = 10
+J = np.eye(3)
+Cd = 1
