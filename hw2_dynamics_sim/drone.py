@@ -1,5 +1,6 @@
 import numpy as np
-import params as x0
+import dynamics_sim.params as x0
+from dynamics_sim.utils import *
 
 class DroneState:
     def __init__(self, init=None) -> None:
@@ -83,8 +84,8 @@ class Drone:
         vDot = self.g + self.aero_forces(state, T)
 
         omegaBar = np.insert(state.omega, 0, 0)
-        quatDot = 1/2 * self.quat_action(state.quat, omegaBar)
-        omegaDot = np.linalg.inv(self.J) @ (-self.cross(state.omega) @ (self.J@state.omega) + tau)
+        quatDot = 1/2 * quat_action(state.quat, omegaBar)
+        omegaDot = np.linalg.inv(self.J) @ (-cross(state.omega) @ (self.J@state.omega) + tau)
 
         return np.concatenate([pDot, vDot, quatDot, omegaDot], 0)
         
@@ -102,29 +103,7 @@ class Drone:
         e3_dot = 0.5 * (r*e0 + q*e1 -p*e2)
         return np.array([e0_dot, e1_dot, e2_dot, e3_dot])
 
-    @staticmethod
-    def quat_action(quat1, quat2):
-        """Multiply 2 quaternions"""
-        w0, x0, y0, z0 = quat1
-        w1, x1, y1, z1 = quat2
-        return np.array([-x1 * x0 - y1 * y0 - z1 * z0 + w1 * w0,
-                        x1 * w0 + y1 * z0 - z1 * y0 + w1 * x0,
-                        -x1 * z0 + y1 * w0 + z1 * x0 + w1 * y0,
-                        x1 * y0 - y1 * x0 + z1 * w0 + w1 * z0])
-
-    @staticmethod
-    def cross(x):
-        """Moves a 3 vector into so(3)
-
-        Args:
-            x (3 ndarray) : Parametrization of Lie Algebra
-
-        Returns:
-            x (3,3 ndarray) : Element of so(3)"""
-        x = x.flatten()
-        return np.array([[   0, -x[2],  x[1]],
-                        [ x[2],     0, -x[0]],
-                        [-x[1],  x[0],     0]])
+    
         
 
 

@@ -4,18 +4,18 @@ import numpy as np
 import time
 
 from drone import Drone
-from dummy_control.visualize import AirSimViz
+from hw1_dummy_control.visualize import AirSimViz
 
-dt = 0.05
+dt = 0.01
 uav = Drone(dt)
 viz = AirSimViz()
 
 m = 10
-thrust = m*9.81*0
+thrust = m*9.81*1.1
 T = thrust/m
-mx = 0
-my = 0
-mz = -0.1
+mx = 0.01
+my = 0.0
+mz = -0.0
 tau = np.array([[mx, my, mz]]).T
 
 while True:
