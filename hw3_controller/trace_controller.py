@@ -17,7 +17,7 @@ class SO3_Controller:
         thrustComponent = -gains.kx*ex - gains.kv*ev - self.drone.m*self.drone.g + self.drone.m*ad
         b3 = thrustComponent / np.linalg.norm(thrustComponent)
         b2 = cross(b3)@b1
-        Rd = np.concatenate((b1,b2,b3))
+        Rd = np.concatenate((b1,b2,b3)) # Not orthonormal??
         eR = 0.5 * vee(Rd.T@state.R - state.R.T@Rd)
 
         RdDot = self.Rdot.update(Rd)

@@ -1,6 +1,6 @@
 import numpy as np
-import dynamics_sim.params as x0
-from dynamics_sim.utils import *
+import hw2_dynamics_sim.params as x0
+from tools.utils import *
 
 class DroneState:
     def __init__(self, init=None) -> None:
