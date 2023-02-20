@@ -22,7 +22,7 @@ J = np.eye(3)*0.1
 Cd = 0.1
 
 # Controller Gains
-kx = 0.1
-kv = 0.5
-kR = 0.3
-kOmega = 0.1
+kx = 2  # .4
+kv = 2 # .7
+kR = 1.5 # .1
+kOmega = 1.5 # .1
