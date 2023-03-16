@@ -25,3 +25,16 @@ class AirSimViz:
 
         self.client.simSetVehiclePose(pose, False)
 
+
+    def get_image(self):
+        im = self.client.simGetImages([airsim.ImageRequest("bottom_center_custom", airsim.ImageType.Scene, False, False)])[0]
+        # get numpy array
+        img1d = np.fromstring(im.image_data_uint8, dtype=np.uint8) 
+
+        # reshape array to 4 channel image array H X W X 4
+        img_rgb = img1d.reshape(im.height, im.width, 3)
+
+        # original image is fliped vertically
+        # img_rgb = np.flipud(img_rgb)
+
+        return img_rgb

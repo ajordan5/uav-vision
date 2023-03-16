@@ -1,8 +1,8 @@
 import numpy as np
 
-north0 = 0.  # initial north position
-east0 = 0.  # initial east position
-down0 = -100.0  # initial down position
+north0 = -7.  # initial north position
+east0 = 13.  # initial east position
+down0 = -10.0  # initial down position
 u0 = 0.  # initial velocity along body x-axis
 v0 = 0.  # initial velocity along body y-axis
 w0 = 0.  # initial velocity along body z-axis
