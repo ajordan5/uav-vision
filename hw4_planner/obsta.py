@@ -1,5 +1,6 @@
+
 """
-landing trajectory with minimum acceleration / jerk
+landing trajectory with minimum acceleration and obstacle avoidance
         2/17/22 - RWB
 """
 import numpy as np
@@ -67,7 +68,20 @@ def waypoint_fun(ctrl_pts, start, end, knots, order, wp, wp_ts):
     for t in np.arange(knots[0], knots[-1], 0.1):
         total_accel += np.linalg.norm(accel(t))
 
-    return 100*total_dist + total_accel
+    return 0*total_dist + total_accel
+
+def g_wp(ctrl_pts, start, end, knots, order, wp, wp_ts, tol=1e-1):
+    ctrl_pts = ctrl_pts.reshape((-1,3))
+    all_pts = np.concatenate((start, ctrl_pts, end), 0)
+    path = BSpline(t=knots, c=all_pts, k=order)
+
+    cons = []
+    for idx, pt in enumerate(wp):
+        t = wp_ts[idx]
+        dist = abs(np.linalg.norm(path(t) - pt))
+        cons.append(tol - dist)
+    
+    return np.array(cons)
 
 if __name__ == "__main__":
     # initial and final time
@@ -79,7 +93,7 @@ if __name__ == "__main__":
                       tf, tf, tf, tf])
     # num control = num knots - order - 1
     start_pt = np.array([[0, 0, 0]])
-    end_pt = np.array([[2, 1, 1]])
+    end_pt = np.array([[10, 10, 3]])
     
     ctrl_pts = np.array([[0, 1, 0],
                          [0, 0, 0],
@@ -88,19 +102,24 @@ if __name__ == "__main__":
     
 
     # Min accel trajectory, just a straight line
-    res = minimize(accel_fun, ctrl_pts, args=(start_pt, end_pt, knots, order), method='SLSQP')
-    print(res)
+    # res = minimize(accel_fun, ctrl_pts, args=(start_pt, end_pt, knots, order), method='SLSQP')
+    # print(res)
 
-    cp_star = res.x.reshape((-1,3))
-    all_pts = np.concatenate((start_pt, cp_star, end_pt), 0)
-    spl = BSpline(t=knots, c=all_pts, k=order)
-    plotSpline(spl)
+    # cp_star = res.x.reshape((-1,3))
+    # all_pts = np.concatenate((start_pt, cp_star, end_pt), 0)
+    # spl = BSpline(t=knots, c=all_pts, k=order)
+    # plotSpline(spl)
 
     # Min distance from waypoint at ti
-    waypoints = np.array([[0.5,0.5,0],
-                          [0.75,0,0]])
-    waypoint_ts = [1,3]
-    res = minimize(waypoint_fun, ctrl_pts, args=(start_pt, end_pt, knots, order, waypoints, waypoint_ts), method='SLSQP')
+    waypoints = np.array([[3,3,0.2],
+                          [5,8,2.2],
+                          [8,8,2.7]])
+    
+    waypoint_ts = [1,3,4]    
+    theArgs = (start_pt, end_pt, knots, order, waypoints, waypoint_ts)
+    cons = [{'type':'ineq', 'fun':g_wp, 'args': theArgs}]
+    
+    res = minimize(waypoint_fun, ctrl_pts, constraints=cons, args=theArgs, method='SLSQP')
     print(res)
 
     cp_star = res.x.reshape((-1,3))
