@@ -1,8 +1,8 @@
 import numpy as np
 
-north0 = 409.  # initial north position -7 for optical flow
-east0 = -559.1  # initial east position -17
-down0 = -196  # initial down position -5
+north0 = -495  # initial north position -7 for optical flow
+east0 = -420  # initial east position -17
+down0 = 32.4  # initial down position -5
 u0 = 0.  # initial velocity along body x-axis
 v0 = 0.  # initial velocity along body y-axis
 w0 = 0.  # initial velocity along body z-axis
