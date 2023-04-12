@@ -27,7 +27,10 @@ class UserDefinedPath:
 
 
         self.traj = BSplineTrajectory()
-        self.traj.find_path_through_waypoints(np.array(self.pixel_waypoints))        
+        self.traj.find_path_through_waypoints(np.array(self.pixel_waypoints))
+        self.best_path = self.traj.spl
+        # self.traj = BSplineTrajectory(num_segments=10)        
+        # self.traj.find_path_through_waypoints(np.array(self.pixel_waypoints))        
 
             
 
@@ -39,71 +42,104 @@ class UserDefinedPath:
 
 
 class BSplineTrajectory:
-    def __init__(self, tf=5, dt=0.2, order=3) -> None:
-        self.knots = np.arange(0, tf+dt, dt, )
-        self.num_ctrl_pts = len(self.knots)
+    def __init__(self, tf=1, num_segments=20, order=3) -> None:
+        self.knots = self.uniform_knots(tf, order, num_segments)
+        self.N = num_segments+order
         self.order=order
         self.tf = tf
 
-        for i in range(order):
-            self.knots = np.append(self.knots,tf)
-            self.knots = np.insert(self.knots, 0, 0)
 
-    def find_path_through_waypoints(self, waypoints):
+    def uniform_knots(self, tf, order, num_segments):
+        t0=0
+        knots = np.concatenate((
+            t0 * np.ones(order),
+            np.concatenate((
+                np.arange(t0, tf, (tf-t0)/(num_segments)),
+                tf * np.ones(order+1)),
+                axis=0)
+            ), axis=0)
+        return knots
 
-        # Get distances between waypoints to calculate times
+    def get_waypoint_times(self):
         distances = []
         total = 0
-        for i, w in enumerate(waypoints):
+        for i, w in enumerate(self.waypoints):
             if i==0:
                 continue
 
-            diff = np.linalg.norm(w - waypoints[i-1])
+            diff = np.linalg.norm(w - self.waypoints[i-1])
             total +=diff
             distances.append(total)
 
-        wp_times = np.array(distances)/total * self.tf
+        return np.array(distances)/total * self.tf
+    
 
-        self.start_pt = waypoints[0,:].reshape(1,-1)
-        self.end_pt = waypoints[-1,:].reshape(1,-1)
-        middle = waypoints[1:-1,:]
+    def setup_cps(self):
+        # Start and end at the first and last wp
+        self.start_pt = self.waypoints[0,:].reshape(1,-1)
+        self.end_pt = self.waypoints[-1,:].reshape(1,-1)
 
-        interp = np.linspace(0,1,self.num_ctrl_pts)
-        ctrl_pts0 = (self.start_pt + (self.end_pt-self.start_pt)*interp[:,None])[:,:2]
+        # Clamp accel and vel to start at zero
+        self.start_pts = np.tile(self.waypoints[0,:].reshape(1,-1), (3,1))
+        self.end_pts = np.tile(self.waypoints[-1,:].reshape(1,-1), (3,1))
+        self.middle = self.waypoints[1:-1,:]
+
+        interp = np.linspace(0,1,self.N-6)
+        self.ctrl_pts0 = (self.start_pt + (self.end_pt-self.start_pt)*interp[:,None])[:,:2]
+        
+
+    def find_path_through_waypoints(self, waypoints):
+        self.waypoints = waypoints
+
+        # Get distances between waypoints to calculate times
+        
+        wp_times = self.get_waypoint_times()
+        self.setup_cps()
+
+        
         # self.plot_traj(ctrl_pts0)
         
-        # Set the maximum number of iterations to 100
+        # Set the maximum number of iterations to 1000
         max_iterations = 1000
 
         # Set the options parameter
         options = {'maxiter': max_iterations}
-        cons_ineq = [{'type':'ineq', 'fun':self.wp_constraint, 'args': (middle, wp_times[:-1])}]
-        opt_ctrl_pts = minimize(self.objective, ctrl_pts0, method='SLSQP', options=options, constraints=cons_ineq)
+        cons_ineq = [{'type':'ineq', 'fun':self.wp_constraint, 'args': (self.middle, wp_times[:-1])}]
+        opt_ctrl_pts = minimize(self.objective, self.ctrl_pts0, method='SLSQP', options=options, constraints=cons_ineq)
         print(opt_ctrl_pts)
-        self.plot_traj(opt_ctrl_pts.x, wp=middle)
+
+        # Put together optimal path
+        middle_pts = opt_ctrl_pts.x.reshape((-1,2))
+        altitude = np.ones((middle_pts.shape[0],1))*self.start_pt[0,2]
+        middle_pts = np.concatenate((middle_pts,altitude),1)
+
+        ctrl_pts = np.concatenate((self.start_pts, middle_pts, self.end_pts), 0)
+        self.spl = BSpline(t=self.knots, c=ctrl_pts, k=self.order)
+        self.plot_traj()
 
     def objective(self, ctrl_pts, minimize_derivative=2):
         ctrl_pts = ctrl_pts.reshape((-1,2))
         altitude = np.ones((ctrl_pts.shape[0],1))*self.start_pt[0,2]
         ctrl_pts = np.concatenate((ctrl_pts,altitude),1)
 
-        all_pts = np.concatenate((self.start_pt, ctrl_pts, self.end_pt), 0)
+        all_pts = np.concatenate((self.start_pts, ctrl_pts, self.end_pts), 0)
         path = BSpline(t=self.knots, c=all_pts, k=self.order)
         derivative_objective = path.derivative(minimize_derivative)
 
         # Integrate snap across knots
         total_accel = 0
-        for t in np.arange(self.knots[0], self.knots[-1], 0.2):
-            total_accel += np.linalg.norm(derivative_objective(t))
+        t = np.linspace(self.knots[0], self.knots[-1], self.N)
+        accel = derivative_objective(t)
 
-        return total_accel
+
+        return np.linalg.norm(accel)
 
     def wp_constraint(self, ctrl_pts, wp, wp_ts, tol=1e-0):
         ctrl_pts = ctrl_pts.reshape((-1,2))
         altitude = np.ones((ctrl_pts.shape[0],1))*self.start_pt[0,2]
         ctrl_pts = np.concatenate((ctrl_pts,altitude),1)
 
-        all_pts = np.concatenate((self.start_pt, ctrl_pts, self.end_pt), 0)
+        all_pts = np.concatenate((self.start_pts, ctrl_pts, self.end_pts), 0)
         path = BSpline(t=self.knots, c=all_pts, k=self.order)
 
         cons = []
@@ -114,24 +150,19 @@ class BSplineTrajectory:
         # print(cons)
         return np.array(cons)
     
-    def plot_traj(self, middle_pts, wp=None):
-        middle_pts = middle_pts.reshape((-1,2))
-        altitude = np.ones((middle_pts.shape[0],1))*self.start_pt[0,2]
-        middle_pts = np.concatenate((middle_pts,altitude),1)
+    def plot_traj(self):
+        
 
-        ctrl_pts = np.concatenate((self.start_pt, middle_pts, self.end_pt), 0)
-        spl = BSpline(t=self.knots, c=ctrl_pts, k=self.order)
-
-        t0 = spl.t[0]  # first knot is t0
-        tf = spl.t[-1]  # last knot is tf
+        t0 = self.spl.t[0]  # first knot is t0
+        tf = self.spl.t[-1]  # last knot is tf
         # number of points in time vector so spacing is 0.01
         N = int(np.ceil((tf - t0)/0.01))
         t = np.linspace(t0, tf, N)  # time vector
-        position = spl(t)
+        position = self.spl(t)
         # 3D trajectory plot
         fig = plt.figure(1)
         ax = fig.add_subplot(111, projection='3d')
-        ax.plot(spl.c[:, 0], spl.c[:, 1], spl.c[:, 2],
+        ax.plot(self.spl.c[:, 0], self.spl.c[:, 1], self.spl.c[:, 2],
                 '-o', label='control points')
         ax.plot(position[:, 0], position[:, 1], position[:, 2],
                 'b', label='spline')
@@ -139,8 +170,8 @@ class BSplineTrajectory:
         # ax.scatter(self.start_pt, label="Start")
         ax.scatter(self.end_pt[0,0], self.end_pt[0,1], self.end_pt[0,2], color='g', label="End")
         ax.scatter(self.start_pt[0,0], self.start_pt[0,1], self.start_pt[0,2], color='m', label="Start")
-        if wp is not None:
-            ax.scatter(wp[:,0], wp[:,1], wp[:,2], color='r', label = "waypoints")
+        if self.waypoints is not None:
+            ax.scatter(self.waypoints[:,0], self.waypoints[:,1], self.waypoints[:,2], color='r', label = "waypoints")
         #ax.set_xlim3d([-10, 10])
         ax.legend()
         ax.set_xlabel('x', fontsize=16, rotation=0)

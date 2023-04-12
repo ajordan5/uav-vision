@@ -140,18 +140,18 @@ if __name__ == "__main__":
     cons_ineq = [{'type':'ineq', 'fun':g_wp, 'args': theArgs}]
     cons_eq = [{'type':'eq', 'fun':h_wp, 'args': theArgs}]
     
-    # res = minimize(waypoint_fun, ctrl_pts, constraints=cons_eq, args=theArgs, method='SLSQP')
-    # print(res)
+    res = minimize(waypoint_fun, ctrl_pts, constraints=cons_eq, args=theArgs, method='SLSQP')
+    print(res)
 
-    # cp_star = res.x.reshape((-1,3))
-    # all_pts = np.concatenate((start_pt, cp_star, end_pt), 0)
-    # spl = BSpline(t=knots, c=all_pts, k=order)
-    # plotSpline(spl, wp=waypoints)
-
-    # Student soln
-    res = SQP_QN(ctrl_pts, waypoint_fun, h_wp, args=theArgs)
-    cp_star = res.reshape((-1,3))
+    cp_star = res.x.reshape((-1,3))
     all_pts = np.concatenate((start_pt, cp_star, end_pt), 0)
     spl = BSpline(t=knots, c=all_pts, k=order)
     plotSpline(spl, wp=waypoints)
+
+    # Student soln
+    # res = SQP_QN(ctrl_pts, waypoint_fun, h_wp, args=theArgs)
+    # cp_star = res.reshape((-1,3))
+    # all_pts = np.concatenate((start_pt, cp_star, end_pt), 0)
+    # spl = BSpline(t=knots, c=all_pts, k=order)
+    # plotSpline(spl, wp=waypoints)
 
