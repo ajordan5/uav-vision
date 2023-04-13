@@ -7,6 +7,9 @@ from scipy.interpolate import BSpline
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 
+from hw2_dynamics_sim.drone import Drone, DroneState
+from hw3_controller.trace_controller import SO3_Controller, MsgTrajectory
+
 
 class UserDefinedPath:
     def __init__(self, num_pts=10, altitude=-5) -> None:
@@ -46,6 +49,7 @@ class BSplineTrajectory:
         self.knots = self.uniform_knots(tf, order, num_segments)
         self.N = num_segments+order
         self.order=order
+        self.g = np.array([[0,0,9.81]]).T
         self.tf = tf
 
 
@@ -113,9 +117,10 @@ class BSplineTrajectory:
         altitude = np.ones((middle_pts.shape[0],1))*self.start_pt[0,2]
         middle_pts = np.concatenate((middle_pts,altitude),1)
 
-        ctrl_pts = np.concatenate((self.start_pts, middle_pts, self.end_pts), 0)
-        self.spl = BSpline(t=self.knots, c=ctrl_pts, k=self.order)
+        self.ctrl_pts = np.concatenate((self.start_pts, middle_pts, self.end_pts), 0)
+        self.spl = BSpline(t=self.knots, c=self.ctrl_pts, k=self.order)
         self.plot_traj()
+        self.check_feasible()
 
     def objective(self, ctrl_pts, minimize_derivative=2):
         ctrl_pts = ctrl_pts.reshape((-1,2))
@@ -168,10 +173,10 @@ class BSplineTrajectory:
                 'b', label='spline')
         
         # ax.scatter(self.start_pt, label="Start")
-        ax.scatter(self.end_pt[0,0], self.end_pt[0,1], self.end_pt[0,2], color='g', label="End")
+        if self.middle is not None:
+            ax.scatter(self.middle[:,0], self.middle[:,1], self.middle[:,2], color='r', label = "waypoints")
         ax.scatter(self.start_pt[0,0], self.start_pt[0,1], self.start_pt[0,2], color='m', label="Start")
-        if self.waypoints is not None:
-            ax.scatter(self.waypoints[:,0], self.waypoints[:,1], self.waypoints[:,2], color='r', label = "waypoints")
+        ax.scatter(self.end_pt[0,0], self.end_pt[0,1], self.end_pt[0,2], color='g', label="End")
         #ax.set_xlim3d([-10, 10])
         ax.legend()
         ax.set_xlabel('x', fontsize=16, rotation=0)
@@ -180,9 +185,48 @@ class BSplineTrajectory:
         # ax.axes.set_zlim3d(0,10)
         ax.set_ylabel('y', fontsize=16, rotation=0)
         ax.set_zlabel('z', fontsize=16, rotation=0)
-        plt.show()
+        # plt.show()
+
+    def check_feasible(self):
+        dt = 0.1
+        uav = Drone(dt)
+        cont = SO3_Controller(dt, uav)
+
+        a_up = 1
+        a_low = 1
+        alpha = 1
+        feasible = False
+
+        tf = self.tf
+        T_max = 50
+        T_min = 5
+
+        while not feasible:
+
+            times = np.arange(0, self.knots[-1], dt)
+            spl = BSpline(t=self.knots, c=self.ctrl_pts, k=self.order)
+            
+            feasible = True
+
+            for t in times:
+                # p = spl(t)
+                # v = spl.derivative(1)(t)
+                a = spl.derivative(2)(t)
+                T = self.flat_output_control(a)
+                print(t, T)
+
+                if T > T_max:
+                    self.knots*=2
+                    feasible = False
+                    break
 
 
+            
+
+
+    def flat_output_control(self, accel):
+        T = np.linalg.norm(- self.g.T + accel)
+        return T
         
 
 
