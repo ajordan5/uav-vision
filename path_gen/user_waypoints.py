@@ -19,18 +19,46 @@ class UserDefinedPath:
         self.pixel_waypoints = []
         self.alt = altitude
 
-        img = cv2.imread("./path_gen/altitude_map.png")
+        self.img = cv2.imread("./path_gen/altitude_map.png")
         
         while len(self.waypoints) < num_pts:
-            cv2.imshow('image',img)
+            cv2.imshow('image',self.img)
             k = cv2.waitKey(10)
             if k == ord('x'):
                 break
         cv2.destroyAllWindows()
+        self.traj = BSplineTrajectory(num_segments=25)
+        res = self.traj.find_path_through_waypoints(np.array(self.waypoints))
+        self.traj.check_feasible()
 
+        seg = [5, 10, 20, 30, 40]
+        ev = []
+        it = []
+        # fig, ax = plt.subplots(1,1)
+        # fig2, ax2 = plt.subplots(1,1)
+        # for s in np.arange(6,50,2):
+        #     print("SEGMENTS", s)
+        #     self.traj = BSplineTrajectory(num_segments=s)
+        #     res = self.traj.find_path_through_waypoints(np.array(self.waypoints))
+        #     if res.success:
+        #         ax.scatter(s, res.nit, c='b')
+        #         ax2.scatter(s, res.nfev, c='b')
+        #     else:
+        #         ax.scatter(s, 0, c='r')
+        #         ax2.scatter(s, 0, c='r')
 
-        self.traj = BSplineTrajectory()
-        self.traj.find_path_through_waypoints(np.array(self.pixel_waypoints))
+        # ax2.scatter(0, 0, c='r', label="fail")
+        # ax.scatter(0, 0, c='r', label="fail")
+        
+
+        # ax.set_xlabel("Number of segments")
+        # ax2.set_xlabel("Number of segments")
+        # ax.set_ylabel("iterations")
+        # ax2.set_ylabel("fun evalutations")
+        # fig.legend()
+        # fig2.legend()
+        # plt.show()
+                
         self.best_path = self.traj.spl
         # self.traj = BSplineTrajectory(num_segments=10)        
         # self.traj.find_path_through_waypoints(np.array(self.pixel_waypoints))        
@@ -39,6 +67,7 @@ class UserDefinedPath:
 
     def on_mouse(self, event,x,y,flags,param):
         if event == cv2.EVENT_LBUTTONDOWN:
+            self.img = cv2.circle(self.img, (x,y), 5, (255,0,0), 2)
             north, east = px_to_ned(x,y)
             self.waypoints.append([north,east,self.alt])
             self.pixel_waypoints.append([x,y,0])
@@ -51,6 +80,7 @@ class BSplineTrajectory:
         self.order=order
         self.g = np.array([[0,0,9.81]]).T
         self.tf = tf
+        self.num_segments = num_segments
 
 
     def uniform_knots(self, tf, order, num_segments):
@@ -119,8 +149,9 @@ class BSplineTrajectory:
 
         self.ctrl_pts = np.concatenate((self.start_pts, middle_pts, self.end_pts), 0)
         self.spl = BSpline(t=self.knots, c=self.ctrl_pts, k=self.order)
-        self.plot_traj()
-        self.check_feasible()
+        # self.plot_traj()
+        # self.check_feasible()
+        return opt_ctrl_pts
 
     def objective(self, ctrl_pts, minimize_derivative=2):
         ctrl_pts = ctrl_pts.reshape((-1,2))
@@ -185,6 +216,7 @@ class BSplineTrajectory:
         # ax.axes.set_zlim3d(0,10)
         ax.set_ylabel('y', fontsize=16, rotation=0)
         ax.set_zlabel('z', fontsize=16, rotation=0)
+        ax.set_title("Num Segments: {}".format(self.num_segments))
         # plt.show()
 
     def check_feasible(self):
@@ -192,34 +224,55 @@ class BSplineTrajectory:
         uav = Drone(dt)
         cont = SO3_Controller(dt, uav)
 
-        a_up = 1
-        a_low = 1
-        alpha = 1
+        a_up = 1.
+        a_low = 0.
+        alpha = 1.
         feasible = False
 
         tf = self.tf
-        T_max = 50
-        T_min = 5
-
+        T_up = 50.
+        T_low = 30.
+        T_max = 0.
+        knots0 = self.knots
+        hist = []
         while not feasible:
 
             times = np.arange(0, self.knots[-1], dt)
             spl = BSpline(t=self.knots, c=self.ctrl_pts, k=self.order)
+            print(alpha, T_max)
             
             feasible = True
-
+            T_max = 0
+            hist.append(alpha)
             for t in times:
                 # p = spl(t)
                 # v = spl.derivative(1)(t)
                 a = spl.derivative(2)(t)
                 T = self.flat_output_control(a)
-                print(t, T)
+                T_max = max([T, T_max])
+                # print(t, T)
 
-                if T > T_max:
-                    self.knots*=2
-                    feasible = False
-                    break
+            if T_max > T_up:
+                a_low = a_up
+                a_up*=2
+                alpha = (a_up+a_low)/2
+                self.knots = knots0*alpha
+                feasible = False
+                # break
 
+            elif T_max < T_low:
+                a_up = alpha
+                # a_low /=2
+                alpha = (a_up+a_low)/2
+                self.knots=alpha*knots0
+                feasible = False
+                # break
+
+        fig, ax = plt.subplots(1,1)
+        ax.set_xlabel("iteration")
+        ax.set_ylabel(r"1/ $\alpha$")
+        ax.plot(hist)
+        plt.show()
 
             
 
